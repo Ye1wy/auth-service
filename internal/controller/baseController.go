@@ -2,7 +2,6 @@ package controller
 
 import (
 	"auth-service/pkg/logger"
-	"fmt"
 
 	"github.com/gin-gonic/gin"
 )
@@ -24,19 +23,4 @@ func (bc *BaseController) responce(c *gin.Context, code int, obj any) {
 	default:
 		c.JSON(code, obj)
 	}
-}
-
-func (bc *BaseController) mapping(c *gin.Context, obj any) error {
-	switch c.GetHeader("content-type") {
-	case "application/xml":
-		if err := c.BindXML(&obj); err != nil {
-			return fmt.Errorf("Base Controller: Failed bind xml: %v", err)
-		}
-	default:
-		if err := c.BindJSON(&obj); err != nil {
-			return fmt.Errorf("Base Controller: Failed bind json: %v", err)
-		}
-	}
-
-	return nil
 }

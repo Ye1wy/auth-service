@@ -13,14 +13,13 @@ import (
 )
 
 type userRepo struct {
-	db     *pgxpool.Pool
-	logger *logger.Logger
+	*baseRepo
 }
 
 func NewUserRepo(db *pgxpool.Pool, logger *logger.Logger) *userRepo {
+	baseRepo := NewBaseRepo(db, logger)
 	return &userRepo{
-		db,
-		logger,
+		baseRepo: baseRepo,
 	}
 }
 
@@ -55,7 +54,7 @@ func (r *userRepo) GetById(ctx context.Context, id uuid.UUID) (*domain.User, err
 	}
 
 	if err != nil {
-		r.logger.Debug("Error in Scnaing user", logger.Err(err), "op", op)
+		r.logger.Debug("Error in scaning user", logger.Err(err), "op", op)
 		return nil, fmt.Errorf("User Repo: %v", err)
 	}
 

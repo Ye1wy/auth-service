@@ -1,6 +1,8 @@
 package route
 
 import (
+	"auth-service/internal/controller"
+	"auth-service/internal/middleware"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,15 +12,24 @@ type router struct {
 	router *gin.Engine
 }
 
-func NewRouter() *router {
+func NewRouter(auth *controller.AuthController) *router {
 	r := router{
 		router: gin.Default(),
 	}
 
 	authGroup := r.router.Group("/api/v1")
 	{
-		authGroup.POST("/register", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"mass": "aboba is registered"}) })
+		authGroup.POST("/signup", auth.SignUp)
+		authGroup.POST("/login", auth.Login)
+		authGroup.POST("/logout", auth.Logout)
+		authGroup.POST("/token/refresh", middleware.AuthentificateMiddleware, auth.Refresh)
 	}
+
+	r.router.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"massage": "pong",
+		})
+	})
 
 	return &r
 }
