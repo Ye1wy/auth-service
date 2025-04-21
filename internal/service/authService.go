@@ -203,6 +203,10 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 	s.logger.Debug("Check ip", "ip", ip, "op", op)
 
 	if ip != token.Ip {
+		if err := s.tokenWriter.Delete(ctx, target); err != nil {
+			return nil, err
+		}
+
 		return nil, ErrNewIp
 	}
 
