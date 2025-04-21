@@ -11,28 +11,25 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type AuthService interface {
 	SignUp(ctx context.Context, user domain.User) error
 	Login(ctx context.Context, user domain.User) (*domain.Token, error)
-	Logout(ctx context.Context) error
-	Refresh(ctx context.Context) error
+	Logout(ctx context.Context, token domain.Token) error
+	Refresh(ctx context.Context, token domain.Token) (*domain.Token, error)
 }
 
 type AuthController struct {
 	*BaseController
-	service   AuthService
-	secretKey string
+	service AuthService
 }
 
-func NewAuth(service AuthService, secretKey string, logger *logger.Logger) *AuthController {
+func NewAuth(service AuthService /* secretKey string*/, logger *logger.Logger) *AuthController {
 	ctrl := NewBaseController(logger)
 	return &AuthController{
 		ctrl,
 		service,
-		secretKey,
 	}
 }
 
@@ -54,6 +51,7 @@ func (ctrl *AuthController) SignUp(c *gin.Context) {
 		ctrl.responce(c, http.StatusBadRequest, gin.H{"error": user})
 		return
 	}
+
 	if err != nil {
 		ctrl.logger.Error("Failed in sign up", logger.Err(err), "op", op)
 		ctrl.responce(c, http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -74,9 +72,10 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	mappedData := mapper.LoginToDomain(inputData)
+	user := mapper.LoginToDomain(inputData)
+	user.Ip = c.ClientIP()
 
-	tokens, err := ctrl.service.Login(c.Request.Context(), mappedData)
+	tokens, err := ctrl.service.Login(c.Request.Context(), user)
 	if errors.Is(err, service.ErrIncorrectUsernameOrPassword) {
 		ctrl.responce(c, http.StatusUnauthorized, gin.H{"massage": "incorrect payload"})
 		return
@@ -91,36 +90,66 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 }
 
 func (ctrl *AuthController) Logout(c *gin.Context) {
-	// op := "controller.auth.Logout"
+	op := "controller.auth.Logout"
+
+	var inputTokens dto.Token
+	if err := c.ShouldBind(&inputTokens); err != nil {
+		ctrl.responce(c, http.StatusUnauthorized, gin.H{"401": "Unauthorized"})
+		return
+	}
+
+	tokens := mapper.TokenToDomain(inputTokens)
+
+	if err := ctrl.service.Logout(c.Request.Context(), tokens); err != nil {
+		ctrl.logger.Error("Service error", logger.Err(err), "op", op)
+		ctrl.responce(c, http.StatusInternalServerError, gin.H{"error": "server is dead"})
+		return
+	}
 
 	ctrl.responce(c, http.StatusResetContent, gin.H{})
 }
 
 func (ctrl *AuthController) Refresh(c *gin.Context) {
 	op := "controller.auth.Refresh"
-	refresh := c.GetHeader("refresh_token")
-	if refresh == "" {
-		ctrl.logger.Warn("No refresh token", "op", op)
-		ctrl.responce(c, http.StatusUnauthorized, gin.H{"error": "no needed cookie"})
+
+	var inputTokens dto.Token
+	if err := c.ShouldBind(&inputTokens); err != nil {
+		ctrl.logger.Warn("User don't have tokens or something wrong with bind", logger.Err(err), "op", op)
+		ctrl.responce(c, http.StatusUnauthorized, gin.H{"401": "UNnauthorized"})
 		return
 	}
 
-	ctrl.responce(c, http.StatusOK, "aboba")
-}
+	tokens := mapper.TokenToDomain(inputTokens)
+	ip := c.ClientIP()
+	tokens.Ip = ip
 
-func (ctrl *AuthController) AuthentificateMiddleware(c *gin.Context) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		tokenStr := c.Request.Header.Get("access_token")
-		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-			return ctrl.secretKey, nil
-		})
-
-		if err != nil || !token.Valid {
-			ctrl.responce(c, http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-			c.Abort()
-			return
-		}
-
-		c.Next()
+	newTokens, err := ctrl.service.Refresh(c.Request.Context(), tokens)
+	if errors.Is(err, service.ErrInvalidToken) {
+		ctrl.responce(c, http.StatusUnauthorized, gin.H{"401": "Unauthorized"})
+		return
 	}
+
+	if err != nil {
+		ctrl.responce(c, http.StatusInternalServerError, gin.H{"error": "server is dead"})
+		return
+	}
+
+	ctrl.responce(c, http.StatusOK, newTokens)
 }
+
+// func (ctrl *AuthController) AuthentificateMiddleware(c *gin.Context) gin.HandlerFunc {
+// 	return func(c *gin.Context) {
+// 		tokenStr := c.Request.Header.Get("access_token")
+// 		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+// 			return ctrl.secretKey, nil
+// 		})
+
+// 		if err != nil || !token.Valid {
+// 			ctrl.responce(c, http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+// 			c.Abort()
+// 			return
+// 		}
+
+// 		c.Next()
+// 	}
+// }

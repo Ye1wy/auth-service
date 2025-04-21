@@ -27,7 +27,7 @@ func (r *tokenRepo) GetByUsername(ctx context.Context, username string) (*domain
 	query := "SELECT rt.* FROM refresh_tokens rt JOIN users u ON rt.user_id=u.id WHERE u.username=@username"
 	args := pgx.NamedArgs{"username": username}
 
-	r.logger.Debug("Check", "username", username)
+	r.logger.Debug("Check", "username", username, "op", op)
 
 	var data domain.RefreshToken
 
@@ -51,7 +51,7 @@ func (r *tokenRepo) GetByHash(ctx context.Context, hash string) (*domain.Refresh
 	query := "SELECT * FROM refresh_tokens WHERE token_hash=@hash"
 	args := pgx.NamedArgs{"token_hash": hash}
 
-	r.logger.Debug("Check", "hash", hash)
+	r.logger.Debug("Check", "hash", hash, "op", op)
 
 	var data domain.RefreshToken
 
@@ -71,16 +71,16 @@ func (r *tokenRepo) GetByHash(ctx context.Context, hash string) (*domain.Refresh
 }
 
 func (r *tokenRepo) PinRefreshToken(ctx context.Context, token domain.RefreshToken) error {
-	op := "repository.token.Create"
-	query := "INSERT INTO refresh_tokens(user_id, token_hash, expire_at, created_at) VALUES (@userId @refreshTokenHash, @expireAt, @createdAt)"
-	arg := pgx.NamedArgs{
-		"username":         token.UserId,
+	op := "repository.token.PinRefreshToken"
+	query := "INSERT INTO refresh_tokens(user_id, token_hash, expire_at, created_at) VALUES (@userId, @refreshTokenHash, @expireAt, @createdAt)"
+	args := pgx.NamedArgs{
+		"userId":           token.UserId,
 		"refreshTokenHash": token.Hash,
 		"expireAt":         token.ExpiresAt,
 		"createdAt":        token.CreatedAt,
 	}
 
-	_, err := r.db.Exec(ctx, query, arg)
+	_, err := r.db.Exec(ctx, query, args)
 	if err != nil {
 		r.logger.Debug("can't add refresh token in to ban list", logger.Err(err), "op", op)
 		return fmt.Errorf("Token Repo: %v", err)

@@ -7,10 +7,9 @@ import (
 )
 
 type Token struct {
-	Username string `json:"username"`
-	Ip       string `json:"id"`
-	Access   string `json:"access"`
-	Refresh  string `json:"refresh"`
+	Ip      string `json:"id"`
+	Access  string `json:"access"`
+	Refresh string `json:"refresh"`
 }
 
 type RefreshToken struct {

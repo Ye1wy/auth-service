@@ -106,6 +106,8 @@ func (s *authService) Login(ctx context.Context, user domain.User) (*domain.Toke
 		Refresh: refresh.Refresh,
 	}
 
+	s.logger.Debug("params", "check user", check.Username, "username", user.Username, "a", access, "r", refresh)
+
 	if err := s.tokenWriter.PinRefreshToken(ctx, *refresh); err != nil {
 		s.logger.Debug("Repository error", logger.Err(err), "op", op)
 		return nil, err
@@ -116,17 +118,22 @@ func (s *authService) Login(ctx context.Context, user domain.User) (*domain.Toke
 
 func (s *authService) Logout(ctx context.Context, token domain.Token) error {
 	op := "service.authService.Logout"
-
-	receivedToken, err := bcrypt.GenerateFromPassword([]byte(token.Refresh), bcrypt.DefaultCost)
-	if err != nil {
-		s.logger.Debug("Failed generate hash from base64 string", logger.Err(err), "op", op)
-		return err
+	jwtMap, ok := s.getFromToken(token.Access)
+	if !ok {
+		return ErrInvalidToken
 	}
 
-	dbToken, err := s.tokenReader.GetByHash(ctx, string(receivedToken))
+	username := jwtMap["username"].(string)
+
+	dbToken, err := s.tokenReader.GetByUsername(ctx, username)
 	if err != nil {
 		s.logger.Debug("Failed to get refresh token from database", logger.Err(err), "op", op)
 		return err
+	}
+
+	if ok := s.checkHash(token.Refresh, dbToken.Hash); !ok {
+		s.logger.Debug("refresh base64 not pass check to bcrypt", "op", op)
+		return ErrInvalidToken
 	}
 
 	if err := s.tokenWriter.Delete(ctx, *dbToken); err != nil {
@@ -139,8 +146,16 @@ func (s *authService) Logout(ctx context.Context, token domain.Token) error {
 
 func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.Token, error) {
 	op := "service.authService.Refresh"
+	jwtMap, ok := s.getFromToken(token.Access)
+	if !ok {
+		s.logger.Debug("Failed to get target username from JWT token payload", "op", op)
+		return nil, ErrInvalidToken
+	}
 
-	dbToken, err := s.tokenReader.GetByUsername(ctx, token.Username)
+	username := jwtMap["username"].(string)
+	s.logger.Debug("Check username", "username", username, "op", op)
+
+	dbToken, err := s.tokenReader.GetByUsername(ctx, username)
 	if err != nil {
 		s.logger.Debug("Failed to get refresh token from database", logger.Err(err), "op", op)
 		return nil, err
@@ -151,25 +166,22 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 		return nil, ErrRefreshIsExpired
 	}
 
-	ip, err := s.getIpFromToken(token.Access)
-	if err != nil {
-		return nil, err
-	}
+	ip := jwtMap["ip"].(string)
+	s.logger.Debug("Check ip", "ip", ip, "op", op)
 
 	if ip != token.Ip {
 		return nil, ErrNewIp
 	}
 
-	access, err := s.genereateAccessToken(token.Username, token.Ip)
+	access, err := s.genereateAccessToken(username, token.Ip)
 	if err != nil {
 		return nil, err
 	}
 
 	res := domain.Token{
-		Username: token.Username,
-		Ip:       token.Ip,
-		Access:   access,
-		Refresh:  token.Refresh,
+		Ip:      token.Ip,
+		Access:  access,
+		Refresh: token.Refresh,
 	}
 
 	return &res, nil
@@ -225,25 +237,23 @@ func (s *authService) generateRefreshToken(userId uuid.UUID) (*domain.RefreshTok
 	return &res, nil
 }
 
-func (s *authService) getIpFromToken(tokenStr string) (string, error) {
+func (s *authService) getFromToken(tokenStr string) (jwt.MapClaims, bool) {
+	secret := []byte(s.secretKey)
 	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, http.ErrAbortHandler
 		}
-		return s.secretKey, nil
+		return secret, nil
 	})
 
-	if err != nil || !token.Valid {
-		return "", err
+	if err != nil {
+		return nil, false
 	}
 
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		if ip, ok := claims["ip"].(string); ok {
-			return ip, nil
-		}
-
-		return "", ErrNoContent
+		return claims, true
 	}
 
-	return "", ErrInvalidToken
+	s.logger.Debug("Invalid JWT token")
+	return nil, false
 }

@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Env                     string `env:"env" env-default:"local"`
+	Secret                  string `env:"secret_word"`
 	HttpServer              `env:"server"`
 	database.PostgresConfig `env:"postgres"`
 }
