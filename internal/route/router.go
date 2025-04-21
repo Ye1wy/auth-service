@@ -2,7 +2,6 @@ package route
 
 import (
 	"auth-service/internal/controller"
-	"auth-service/internal/middleware"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +21,7 @@ func NewRouter(auth *controller.AuthController) *router {
 		authGroup.POST("/signup", auth.SignUp)
 		authGroup.POST("/login", auth.Login)
 		authGroup.POST("/logout", auth.Logout)
-		authGroup.POST("/token/refresh", middleware.AuthentificateMiddleware, auth.Refresh)
+		authGroup.POST("/token/refresh", auth.Refresh)
 	}
 
 	r.router.GET("/ping", func(c *gin.Context) {

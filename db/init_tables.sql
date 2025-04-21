@@ -7,6 +7,15 @@ CREATE TABLE IF NOT EXISTS users {
     email TEXT NOT NULL
 };
 
-CREATE TABLE IF NOT EXISTS token_ban {
-    refresh_token TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS refresh_tokens {
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    token_hash TEXT NOT NULL,
+    expire_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL
 };
+
+ALTER TABLE refresh_tokens
+ADD CONSTRAINT fk_user
+FOREIGN KEY (user_id) REFERENCES users(id)
+ON DELETE CASCADE;
