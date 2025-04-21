@@ -4,7 +4,6 @@ import (
 	"auth-service/internal/model/domain"
 	"auth-service/pkg/logger"
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -22,52 +21,39 @@ func NewTokenRepo(db *pgxpool.Pool, logger *logger.Logger) *tokenRepo {
 	}
 }
 
-func (r *tokenRepo) GetByUsername(ctx context.Context, username string) (*domain.RefreshToken, error) {
-	op := "repository.token.GetByHash"
+func (r *tokenRepo) GetByUsername(ctx context.Context, username string) ([]domain.RefreshToken, error) {
+	op := "repository.token.GetByUsername"
 	query := "SELECT rt.* FROM refresh_tokens rt JOIN users u ON rt.user_id=u.id WHERE u.username=@username"
 	args := pgx.NamedArgs{"username": username}
 
 	r.logger.Debug("Check", "username", username, "op", op)
 
-	var data domain.RefreshToken
+	var datas []domain.RefreshToken
 
-	row := r.db.QueryRow(ctx, query, args)
-	err := row.Scan(&data.Id, &data.UserId, &data.Hash, &data.ExpiresAt, &data.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		r.logger.Debug("Hash not found", "op", op)
-		return nil, ErrRefreshNotFound
+	rows, err := r.db.Query(ctx, query, args)
+	if err != nil {
+		r.logger.Debug("Query error", logger.Err(err), "op", op)
+		return nil, fmt.Errorf("token repo: failed exec query %v", err)
 	}
 
-	if err != nil {
+	for rows.Next() {
+		var data domain.RefreshToken
+
+		err := rows.Scan(&data.Id, &data.UserId, &data.Hash, &data.ExpiresAt, &data.CreatedAt)
+		if err != nil {
+			r.logger.Debug("Failed binding data", logger.Err(err), "op", op)
+			continue
+		}
+
+		datas = append(datas, data)
+	}
+
+	if len(datas) == 0 {
 		r.logger.Debug("failed in scan data from repo", logger.Err(err), "username", username, "op", op)
-		return nil, err
-	}
-
-	return &data, nil
-}
-
-func (r *tokenRepo) GetByHash(ctx context.Context, hash string) (*domain.RefreshToken, error) {
-	op := "repository.token.GetByHash"
-	query := "SELECT * FROM refresh_tokens WHERE token_hash=@hash"
-	args := pgx.NamedArgs{"token_hash": hash}
-
-	r.logger.Debug("Check", "hash", hash, "op", op)
-
-	var data domain.RefreshToken
-
-	row := r.db.QueryRow(ctx, query, args)
-	err := row.Scan(&data.Id, &data.UserId, &data.Hash, &data.ExpiresAt, &data.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		r.logger.Debug("Hash not found", "op", op)
 		return nil, ErrRefreshNotFound
 	}
 
-	if err != nil {
-		r.logger.Debug("failed in scan data from repo", logger.Err(err), "hash", hash, "op", op)
-		return nil, err
-	}
-
-	return &data, nil
+	return datas, nil
 }
 
 func (r *tokenRepo) PinRefreshToken(ctx context.Context, token domain.RefreshToken) error {

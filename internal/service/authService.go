@@ -21,8 +21,7 @@ type TokenWrite interface {
 }
 
 type TokenRead interface {
-	GetByUsername(ctx context.Context, username string) (*domain.RefreshToken, error)
-	GetByHash(ctx context.Context, hash string) (*domain.RefreshToken, error)
+	GetByUsername(ctx context.Context, username string) ([]domain.RefreshToken, error)
 }
 
 type UserRead interface {
@@ -85,7 +84,14 @@ func (s *authService) Login(ctx context.Context, user domain.User) (*domain.Toke
 		return nil, fmt.Errorf("Auth Service: Error to get check data %v", err)
 	}
 
-	if user.Username != check.Username && s.checkHash(user.Password, check.Password) {
+	s.logger.Debug("data from user repo", "username", check.Username, "password", check.Password, "op", op)
+
+	if user.Username != check.Username {
+		return nil, ErrIncorrectUsernameOrPassword
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(check.Password), []byte(user.Password))
+	if err != nil {
 		return nil, ErrIncorrectUsernameOrPassword
 	}
 
@@ -131,12 +137,23 @@ func (s *authService) Logout(ctx context.Context, token domain.Token) error {
 		return err
 	}
 
-	if ok := s.checkHash(token.Refresh, dbToken.Hash); !ok {
-		s.logger.Debug("refresh base64 not pass check to bcrypt", "op", op)
-		return ErrInvalidToken
+	var target domain.RefreshToken
+	found := false
+
+	for _, item := range dbToken {
+		err := bcrypt.CompareHashAndPassword([]byte(item.Hash), []byte(token.Refresh))
+		if err == nil {
+			found = true
+			target = item
+		}
 	}
 
-	if err := s.tokenWriter.Delete(ctx, *dbToken); err != nil {
+	if !found {
+		s.logger.Debug("hash not found", "op", op)
+		return ErrNoContent
+	}
+
+	if err := s.tokenWriter.Delete(ctx, target); err != nil {
 		s.logger.Debug("Failed delete refresh token from database", logger.Err(err), "op", op)
 		return err
 	}
@@ -161,7 +178,23 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 		return nil, err
 	}
 
-	diff := time.Now().Compare(dbToken.ExpiresAt)
+	var target domain.RefreshToken
+	found := false
+
+	for _, item := range dbToken {
+		err := bcrypt.CompareHashAndPassword([]byte(item.Refresh), []byte(token.Refresh))
+		if err == nil {
+			found = true
+			target = item
+		}
+	}
+
+	if !found {
+		s.logger.Debug("hash not found", "op", op)
+		return nil, ErrNoContent
+	}
+
+	diff := time.Now().Compare(target.ExpiresAt)
 	if diff > 0 {
 		return nil, ErrRefreshIsExpired
 	}
@@ -190,11 +223,6 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 func (s *authService) hashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(hash), err
-}
-
-func (s *authService) checkHash(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
 }
 
 func (s *authService) genereateAccessToken(username, ip string) (string, error) {
@@ -247,6 +275,7 @@ func (s *authService) getFromToken(tokenStr string) (jwt.MapClaims, bool) {
 	})
 
 	if err != nil {
+		s.logger.Debug("error in get from token", logger.Err(err))
 		return nil, false
 	}
 
