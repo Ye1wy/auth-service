@@ -1,6 +1,7 @@
 package service
 
 import (
+	mailer "auth-service/internal/mail"
 	"auth-service/internal/model/domain"
 	"auth-service/pkg/logger"
 	"context"
@@ -38,16 +39,18 @@ type authService struct {
 	tokenReader TokenRead
 	userWriter  UserWrite
 	userReader  UserRead
+	diller      mailer.Mailer
 	logger      *logger.Logger
 	secretKey   string
 }
 
-func NewAuthService(tokenW TokenWrite, tokenR TokenRead, userR UserRead, userW UserWrite, logger *logger.Logger, secretKey string) *authService {
+func NewAuthService(tokenW TokenWrite, tokenR TokenRead, userR UserRead, userW UserWrite, mailer mailer.Mailer, logger *logger.Logger, secretKey string) *authService {
 	return &authService{
 		tokenWriter: tokenW,
 		tokenReader: tokenR,
 		userWriter:  userW,
 		userReader:  userR,
+		diller:      mailer,
 		logger:      logger,
 		secretKey:   secretKey,
 	}
@@ -204,6 +207,15 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 
 	if ip != token.Ip {
 		if err := s.tokenWriter.Delete(ctx, target); err != nil {
+			return nil, err
+		}
+
+		user, err := s.userReader.GetById(ctx, target.UserId)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := s.diller.SandText(user.Email, "Warning", "Your ip is change"); err != nil {
 			return nil, err
 		}
 
