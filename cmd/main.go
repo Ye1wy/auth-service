@@ -3,6 +3,7 @@ package main
 import (
 	"auth-service/internal/controller"
 	"auth-service/internal/database"
+	mailer "auth-service/internal/mail"
 	"auth-service/internal/repository"
 	"auth-service/internal/route"
 	"auth-service/internal/service"
@@ -21,7 +22,8 @@ func main() {
 
 	tokenRepo := repository.NewTokenRepo(conn, log)
 	userRepo := repository.NewUserRepo(conn, log)
-	scv := service.NewAuthService(tokenRepo, tokenRepo, userRepo, userRepo, log, cfg.Secret)
+	diller := mailer.NewMockMailer()
+	scv := service.NewAuthService(tokenRepo, tokenRepo, userRepo, userRepo, diller, log, cfg.Secret)
 	auth := controller.NewAuth(scv, log)
 	router := route.NewRouter(auth)
 
