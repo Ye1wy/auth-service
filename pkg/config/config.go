@@ -2,6 +2,7 @@ package config
 
 import (
 	"auth-service/internal/database"
+	mailer "auth-service/internal/mail"
 	"log"
 	"os"
 
@@ -9,10 +10,11 @@ import (
 )
 
 type Config struct {
-	Env                     string `env:"env" env-default:"local"`
-	Secret                  string `env:"secret_word"`
-	HttpServer              `env:"server"`
-	database.PostgresConfig `env:"postgres"`
+	Env        string `env:"env" env-default:"local"`
+	Secret     string `env:"secret_word"`
+	HttpServer `env:"server"`
+	database.PostgresConfig
+	mailer.MailerConfig
 }
 
 type HttpServer struct {
