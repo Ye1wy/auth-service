@@ -185,7 +185,7 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 	found := false
 
 	for _, item := range dbToken {
-		err := bcrypt.CompareHashAndPassword([]byte(item.Refresh), []byte(token.Refresh))
+		err := bcrypt.CompareHashAndPassword([]byte(item.Hash), []byte(token.Refresh))
 		if err == nil {
 			found = true
 			target = item
@@ -206,16 +206,20 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 	s.logger.Debug("Check ip", "ip", ip, "op", op)
 
 	if ip != token.Ip {
-		if err := s.tokenWriter.Delete(ctx, target); err != nil {
-			return nil, err
-		}
-
 		user, err := s.userReader.GetById(ctx, target.UserId)
 		if err != nil {
+			s.logger.Debug("Not found or something wrong", logger.Err(err), "op", op)
 			return nil, err
 		}
 
-		if err := s.diller.SandText(user.Email, "Warning", "Your ip is change"); err != nil {
+		s.logger.Debug("Ip not same", "op", op)
+		if err := s.tokenWriter.Delete(ctx, target); err != nil {
+			s.logger.Debug("delete wronge", logger.Err(err), "op", op)
+			return nil, err
+		}
+
+		if err := s.diller.SendMail(user.Email, "Warning", "Your ip is change"); err != nil {
+			s.logger.Debug("send wrong", logger.Err(err), "op", op)
 			return nil, err
 		}
 

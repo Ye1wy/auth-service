@@ -124,7 +124,7 @@ func (ctrl *AuthController) Refresh(c *gin.Context) {
 	tokens.Ip = ip
 
 	newTokens, err := ctrl.service.Refresh(c.Request.Context(), tokens)
-	if errors.Is(err, service.ErrInvalidToken) {
+	if errors.Is(err, service.ErrInvalidToken) || errors.Is(err, service.ErrNoContent) || errors.Is(err, service.ErrNewIp) {
 		ctrl.responce(c, http.StatusUnauthorized, gin.H{"401": "Unauthorized"})
 		return
 	}

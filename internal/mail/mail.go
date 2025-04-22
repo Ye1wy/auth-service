@@ -2,12 +2,13 @@ package mailer
 
 import (
 	"auth-service/pkg/logger"
+	"fmt"
 
 	"gopkg.in/gomail.v2"
 )
 
 type Mailer interface {
-	SandText(to, subject, body string) error
+	SendMail(to, subject, body string) error
 }
 
 type MailerConfig struct {
@@ -15,6 +16,17 @@ type MailerConfig struct {
 	SenderUsername string `env:"sender_email"`
 	SenderPassword string `env:"sender_password"`
 	SenderPort     int    `env:"sender_port"`
+}
+
+type mockMailer struct{}
+
+func NewMockMailer() *mockMailer {
+	return &mockMailer{}
+}
+
+func (m *mockMailer) SendMail(to, subject, body string) error {
+	fmt.Printf("Sended mail \nto: %s\nsubject: %s\n, body: %s\n", to, subject, body)
+	return nil
 }
 
 type goMailer struct {
@@ -32,7 +44,7 @@ func NewGoMailer(cfg *MailerConfig, logger *logger.Logger) *goMailer {
 	}
 }
 
-func (m *goMailer) SendText(to, subject, body string) error {
+func (m *goMailer) SendMail(to, subject, body string) error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", m.cfg.SenderUsername)
 	msg.SetHeader("To", to)
