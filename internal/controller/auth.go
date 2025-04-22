@@ -54,7 +54,7 @@ func (ctrl *AuthController) SignUp(c *gin.Context) {
 
 	if err != nil {
 		ctrl.logger.Error("Failed in sign up", logger.Err(err), "op", op)
-		ctrl.responce(c, http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctrl.responce(c, http.StatusInternalServerError, gin.H{"error": "something wrong with service"})
 		return
 	}
 
