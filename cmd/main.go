@@ -27,7 +27,7 @@ func main() {
 	auth := controller.NewAuth(scv, log)
 	router := route.NewRouter(auth)
 
-	if err := router.Run(":8080"); err != nil {
+	if err := router.Run(":" + cfg.Port); err != nil {
 		log.Error("Somthing went wrong with run service", logger.Err(err), "op", "main")
 		os.Exit(1)
 	}
