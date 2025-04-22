@@ -22,6 +22,7 @@ func NewRouter(auth *controller.AuthController) *router {
 		authGroup.POST("/login", auth.Login)
 		authGroup.POST("/logout", auth.Logout)
 		authGroup.POST("/token/refresh", auth.Refresh)
+		authGroup.POST("/secret/:id", auth.TakeTokens)
 	}
 
 	r.router.GET("/ping", func(c *gin.Context) {

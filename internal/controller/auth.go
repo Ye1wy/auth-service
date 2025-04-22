@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type AuthService interface {
@@ -18,6 +19,7 @@ type AuthService interface {
 	Login(ctx context.Context, user domain.User) (*domain.Token, error)
 	Logout(ctx context.Context, token domain.Token) error
 	Refresh(ctx context.Context, token domain.Token) (*domain.Token, error)
+	Secret(ctx context.Context, id uuid.UUID, ip string) (*domain.Token, error)
 }
 
 type AuthController struct {
@@ -86,7 +88,9 @@ func (ctrl *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	ctrl.responce(c, http.StatusOK, tokens)
+	dto := mapper.TokenToDto(*tokens)
+
+	ctrl.responce(c, http.StatusOK, dto)
 }
 
 func (ctrl *AuthController) Logout(c *gin.Context) {
@@ -134,7 +138,29 @@ func (ctrl *AuthController) Refresh(c *gin.Context) {
 		return
 	}
 
-	ctrl.responce(c, http.StatusOK, newTokens)
+	dto := mapper.TokenToDto(*newTokens)
+
+	ctrl.responce(c, http.StatusOK, dto)
+}
+
+func (ctrl *AuthController) TakeTokens(c *gin.Context) {
+	op := "controller.auth.TakeTokens"
+
+	idStr := c.Param("id")
+
+	id := uuid.MustParse(idStr)
+
+	ip := c.ClientIP()
+
+	tokens, err := ctrl.service.Secret(c.Request.Context(), id, ip)
+	if err != nil {
+		ctrl.logger.Error("Error with create secret tokens", logger.Err(err), "op", op)
+		ctrl.responce(c, http.StatusInternalServerError, gin.H{"error": "server is dead"})
+		return
+	}
+
+	dto := mapper.TokenToDto(*tokens)
+	ctrl.responce(c, http.StatusOK, dto)
 }
 
 // func (ctrl *AuthController) AuthentificateMiddleware(c *gin.Context) gin.HandlerFunc {

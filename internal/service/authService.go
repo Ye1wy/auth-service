@@ -240,6 +240,41 @@ func (s *authService) Refresh(ctx context.Context, token domain.Token) (*domain.
 	return &res, nil
 }
 
+func (s *authService) Secret(ctx context.Context, id uuid.UUID, ip string) (*domain.Token, error) {
+	op := "service.authService.Secret"
+	user, err := s.userReader.GetById(ctx, id)
+	if err != nil {
+		s.logger.Debug("Can't get user by id", logger.Err(err), "op", op)
+		return nil, err
+	}
+
+	access, err := s.genereateAccessToken(user.Username, ip)
+	if err != nil {
+		s.logger.Debug("access token not signed", logger.Err(err), "op", op)
+		return nil, err
+	}
+
+	refresh, err := s.generateRefreshToken(user.Id)
+	if err != nil {
+		s.logger.Debug("Error on generate refresh token", logger.Err(err), "op", op)
+		return nil, err
+	}
+
+	tokens := domain.Token{
+		Access:  access,
+		Refresh: refresh.Refresh,
+	}
+
+	s.logger.Debug("params", "username", user.Username, "a", access, "r", refresh)
+
+	if err := s.tokenWriter.PinRefreshToken(ctx, *refresh); err != nil {
+		s.logger.Debug("Repository error", logger.Err(err), "op", op)
+		return nil, err
+	}
+
+	return &tokens, nil
+}
+
 func (s *authService) hashPassword(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(hash), err
